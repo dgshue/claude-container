@@ -1,30 +1,63 @@
+version: "3.8"
+
 services:
-  claude-proxy:
-    image: nezhar/claude-proxy:latest
-    ports:
-      - "8080:8080"
-    volumes:
-      - ./proxy-data:/data
-    environment:
-      TARGET_API_URL: https://api.anthropic.com
-
-  claude-datasette:
-    image: nezhar/claude-datasette:latest
-    ports:
-      - "8001:8001"
-    volumes:
-      - ./proxy-data:/data:ro
-      - ./datasette-metadata.json:/app/metadata.json:ro
-    depends_on:
-      - claude-proxy
-
   claude-code:
-    image: nezhar/claude-container:latest
-    volumes:
-      - ./workspace:/workspace
-      - ./claude-config:/claude
+    image: dgshue/claude-container:latest
+    container_name: claude-code
     environment:
       CLAUDE_CONFIG_DIR: /claude
-      ANTHROPIC_BASE_URL: http://claude-proxy:8080
-    depends_on:
-      - claude-proxy
+      SSH_USER: claude
+      SSH_PASSWORD: claude
+      BRAVE_API_KEY: ${BRAVE_API_KEY:-}
+      PUID: "0"
+      PGID: "143"
+    volumes:
+      - /path/to/your/workspace:/workspace
+      - /path/to/your/claude-config:/claude
+      - /path/to/your/home:/home/claude
+      - /var/run/docker.sock:/var/run/docker.sock
+    ports:
+      - "22222:22"
+    networks:
+      - traefik_default
+      - claude_webssh
+    # No host port exposure needed; WebSSH2 will connect over the Docker network.
+    # Ensure this container is actually running sshd and listening on 22 internally.
+
+  webssh2:
+    image: billchurch/webssh2:latest
+    container_name: webssh2
+    restart: unless-stopped
+    environment:
+      PUID: "0"
+      PGID: "143"
+      # WebSSH2 defaults typically listen on 2222; Traefik will route to that.
+      # If you later want to pin listen ip/port or other options, mount config.json (see note below).
+    networks:
+      - traefik_default
+      - claude_webssh
+    labels:
+      - "traefik.enable=true"
+      - "traefik.docker.network=traefik_default"
+
+      # Router
+      - "traefik.http.routers.claude.rule=Host(`claude.example.com`)"
+      - "traefik.http.routers.claude.entrypoints=websecure"
+      - "traefik.http.routers.claude.tls.certresolver=cloudflare"
+
+      # WebSSH2 listens on 2222 in-container by default
+      - "traefik.http.services.claude.loadbalancer.server.port=2222"
+
+      # Redirect / -> /ssh/host/claude-code
+      - "traefik.http.middlewares.claude-redirect.redirectregex.regex=^https://claude\\.example\\.com/?$"
+      - "traefik.http.middlewares.claude-redirect.redirectregex.replacement=https://claude.example.com/ssh/host/claude-code"
+      - "traefik.http.middlewares.claude-redirect.redirectregex.permanent=true"
+
+      # Chain middlewares: redirect first, then auth (same pattern you had)
+      - "traefik.http.routers.claude.middlewares=claude-redirect,forwardauth@docker"
+
+networks:
+  traefik_default:
+    external: true
+  claude_webssh:
+    driver: bridge

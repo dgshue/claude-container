@@ -1,0 +1,11 @@
+{
+  "mcpServers": {
+    "brave-search": {
+      "command": "npx",
+      "args": ["-y", "@anthropic-ai/claude-code-mcp-server-brave-search"],
+      "env": {
+        "BRAVE_API_KEY": "__BRAVE_API_KEY__"
+      }
+    }
+  }
+}
