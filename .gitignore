@@ -5,3 +5,4 @@ proxy-data/
 .env*
 .claude/
 .bg-shell/
+compose.yml

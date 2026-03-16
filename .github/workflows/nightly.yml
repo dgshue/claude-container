@@ -80,7 +80,11 @@ jobs:
           MANIFEST: ${{ needs.check-updates.outputs.manifest }}
         run: |
           chmod +x .github/scripts/apply-updates.sh
-          echo "${MANIFEST}" > /tmp/manifest.json
+          cat <<'MANIFEST_EOF' > /tmp/manifest.json
+          ${{ needs.check-updates.outputs.manifest }}
+          MANIFEST_EOF
+          # Validate JSON before passing to script
+          jq . /tmp/manifest.json
           .github/scripts/apply-updates.sh /tmp/manifest.json claude-code/Dockerfile
 
       - name: Bump version
