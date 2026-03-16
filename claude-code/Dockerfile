@@ -119,7 +119,7 @@ RUN npm install -g gsd-pi@~2.16.0
 
 # ── 11. DevOps linting & security tools ──────────────────────────────
 ARG HADOLINT_VERSION=2.12.0
-ARG TRIVY_VERSION=0.58.2
+ARG TRIVY_VERSION=0.69.3
 ARG GITLEAKS_VERSION=8.22.1
 
 RUN arch="$(dpkg --print-architecture)" \
