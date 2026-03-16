@@ -1,12 +1,15 @@
 #!/usr/bin/env bash
 # apply-updates.sh — Read the update manifest and patch the Dockerfile in place.
-# Usage: apply-updates.sh <manifest-json> [dockerfile]
+# Usage: apply-updates.sh <manifest-json-file> [dockerfile]
 set -euo pipefail
 
-MANIFEST="$1"
+MANIFEST_FILE="$1"
 DOCKERFILE="${2:-claude-code/Dockerfile}"
 
 echo "Applying updates to ${DOCKERFILE}..."
+
+# Read the manifest JSON from file
+MANIFEST=$(cat "$MANIFEST_FILE")
 
 # Map package key → Dockerfile ARG name or special handler
 apply_arg_update() {
