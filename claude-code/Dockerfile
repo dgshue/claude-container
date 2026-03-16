@@ -117,6 +117,9 @@ RUN npm install -g @anthropic-ai/claude-code@~2.1.0
 # ── 10b. GSD Pi (v2) — coding agent harness ─────────────────────────
 RUN npm install -g gsd-pi@~2.16.0
 
+# ── 10c. mcporter — MCP server runtime/CLI for Pi ───────────────────
+RUN npm install -g mcporter
+
 # ── 11. DevOps linting & security tools ──────────────────────────────
 ARG HADOLINT_VERSION=2.12.0
 ARG TRIVY_VERSION=0.69.3
