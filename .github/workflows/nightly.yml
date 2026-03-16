@@ -80,10 +80,9 @@ jobs:
           MANIFEST: ${{ needs.check-updates.outputs.manifest }}
         run: |
           chmod +x .github/scripts/apply-updates.sh
-          cat <<'MANIFEST_EOF' > /tmp/manifest.json
-          ${{ needs.check-updates.outputs.manifest }}
-          MANIFEST_EOF
-          # Validate JSON before passing to script
+          # Write manifest from env var (set via GitHub expressions, not shell)
+          printf '%s\n' "$MANIFEST" > /tmp/manifest.json
+          echo "Manifest contents:"
           jq . /tmp/manifest.json
           .github/scripts/apply-updates.sh /tmp/manifest.json claude-code/Dockerfile
 
