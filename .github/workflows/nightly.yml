@@ -1,0 +1,206 @@
+name: Nightly Update & Build
+
+on:
+  schedule:
+    # Run at 3:00 AM UTC every night
+    - cron: '0 3 * * *'
+  workflow_dispatch:
+    inputs:
+      force:
+        description: 'Force build even if no updates found'
+        type: boolean
+        default: false
+      dry_run:
+        description: 'Check for updates without committing or building'
+        type: boolean
+        default: false
+
+permissions:
+  contents: write
+
+jobs:
+  check-updates:
+    runs-on: ubuntu-latest
+    outputs:
+      updates: ${{ steps.check.outputs.updates }}
+      count: ${{ steps.check.outputs.count }}
+      manifest: ${{ steps.check.outputs.manifest }}
+      notes: ${{ steps.check.outputs.notes }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Install jq
+        run: sudo apt-get install -y jq
+
+      - name: Check for package updates
+        id: check
+        run: |
+          chmod +x .github/scripts/check-updates.sh
+          # Exit code 2 = no updates, which is fine
+          .github/scripts/check-updates.sh claude-code/Dockerfile || {
+            exit_code=$?
+            if [[ $exit_code -eq 2 ]]; then
+              echo "No updates available."
+              exit 0
+            fi
+            exit $exit_code
+          }
+
+  update-and-build:
+    needs: check-updates
+    if: needs.check-updates.outputs.updates == 'true' || github.event.inputs.force == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Install jq
+        run: sudo apt-get install -y jq
+
+      - name: Apply updates to Dockerfile
+        if: needs.check-updates.outputs.updates == 'true'
+        env:
+          MANIFEST: ${{ needs.check-updates.outputs.manifest }}
+        run: |
+          chmod +x .github/scripts/apply-updates.sh
+          echo "${MANIFEST}" > /tmp/manifest.json
+          .github/scripts/apply-updates.sh /tmp/manifest.json claude-code/Dockerfile
+
+      - name: Bump version
+        id: version
+        run: |
+          chmod +x .github/scripts/bump-version.sh
+          .github/scripts/bump-version.sh
+
+      - name: Build release notes
+        id: notes
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+          PREV: ${{ steps.version.outputs.previous }}
+          UPDATE_NOTES: ${{ needs.check-updates.outputs.notes }}
+          UPDATE_COUNT: ${{ needs.check-updates.outputs.count }}
+          HAS_UPDATES: ${{ needs.check-updates.outputs.updates }}
+        run: |
+          DATE=$(date -u +%Y-%m-%d)
+
+          # Build commit summary
+          if [[ "${HAS_UPDATES}" == "true" ]]; then
+            SUMMARY="nightly: v${VERSION} — ${UPDATE_COUNT} package(s) updated"
+          else
+            SUMMARY="nightly: v${VERSION} — forced rebuild (no package changes)"
+          fi
+          echo "summary=${SUMMARY}" >> "$GITHUB_OUTPUT"
+
+          # Build release body
+          {
+            echo "body<<RELEASE_EOF"
+            echo "## v${VERSION} — ${DATE} (nightly)"
+            echo ""
+            echo "### Package Updates"
+            if [[ -n "${UPDATE_NOTES}" ]]; then
+              echo -e "${UPDATE_NOTES}"
+            else
+              echo "No package version changes (forced rebuild)."
+            fi
+            echo ""
+            echo "### Container"
+            echo "- Base: \`node:22-bookworm\`"
+            echo "- Image: \`dgshue/claude-container:${VERSION}\`"
+            echo "- Previous: \`${PREV}\`"
+            echo "RELEASE_EOF"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Stop if dry run
+        if: github.event.inputs.dry_run == 'true'
+        run: |
+          echo "🏜️ Dry run — skipping commit, build, and push."
+          echo ""
+          echo "Would have applied:"
+          git diff || true
+          echo ""
+          echo "Version: ${{ steps.version.outputs.version }}"
+          exit 0
+
+      - name: Commit changes
+        if: github.event.inputs.dry_run != 'true'
+        env:
+          COMMIT_SUMMARY: ${{ steps.notes.outputs.summary }}
+          UPDATE_NOTES: ${{ needs.check-updates.outputs.notes }}
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add claude-code/Dockerfile
+          git diff --cached --quiet && echo "No file changes to commit" && exit 0
+          git commit -m "${COMMIT_SUMMARY}" -m "${UPDATE_NOTES}"
+          git push origin main
+
+      - name: Create version tag
+        if: github.event.inputs.dry_run != 'true'
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          git tag -a "${VERSION}" -m "v${VERSION} — nightly automated update"
+          git push origin "${VERSION}"
+
+      - name: Login to DockerHub
+        if: github.event.inputs.dry_run != 'true'
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: Set up Docker Buildx
+        if: github.event.inputs.dry_run != 'true'
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build and push
+        if: github.event.inputs.dry_run != 'true'
+        uses: docker/build-push-action@v6
+        with:
+          context: claude-code
+          push: true
+          no-cache: true
+          platforms: linux/amd64
+          tags: |
+            dgshue/claude-container:${{ steps.version.outputs.version }}
+            dgshue/claude-container:latest
+            dgshue/claude-container:nightly
+
+      - name: Create GitHub Release
+        if: github.event.inputs.dry_run != 'true'
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.version.outputs.version }}
+          name: v${{ steps.version.outputs.version }}
+          body: ${{ steps.notes.outputs.body }}
+          generate_release_notes: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  notify-no-updates:
+    needs: check-updates
+    if: needs.check-updates.outputs.updates != 'true' && github.event.inputs.force != 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - name: No updates needed
+        run: |
+          echo "✅ All packages are up to date. No build needed."
+          echo ""
+          echo "Trigger a manual run with force=true to rebuild anyway."
