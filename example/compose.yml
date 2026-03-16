@@ -6,33 +6,26 @@ services:
     container_name: claude-code
     environment:
       CLAUDE_CONFIG_DIR: /claude
-      SSH_USER: claude
-      SSH_PASSWORD: claude
+      SSH_USER: ${SSH_USER:-claude}
+      SSH_PASSWORD: ${SSH_PASSWORD:-changeme}
       BRAVE_API_KEY: ${BRAVE_API_KEY:-}
-      PUID: "0"
-      PGID: "143"
+      PUID: ${PUID:-1000}
+      PGID: ${PGID:-1000}
     volumes:
-      - /path/to/your/workspace:/workspace
-      - /path/to/your/claude-config:/claude
-      - /path/to/your/home:/home/claude
+      - ./data/workspace:/workspace
+      - ./data/claude-config:/claude
+      - ./data/home:/home/claude
       - /var/run/docker.sock:/var/run/docker.sock
     ports:
       - "22222:22"
     networks:
       - traefik_default
       - claude_webssh
-    # No host port exposure needed; WebSSH2 will connect over the Docker network.
-    # Ensure this container is actually running sshd and listening on 22 internally.
 
   webssh2:
     image: billchurch/webssh2:latest
     container_name: webssh2
     restart: unless-stopped
-    environment:
-      PUID: "0"
-      PGID: "143"
-      # WebSSH2 defaults typically listen on 2222; Traefik will route to that.
-      # If you later want to pin listen ip/port or other options, mount config.json (see note below).
     networks:
       - traefik_default
       - claude_webssh
@@ -40,7 +33,7 @@ services:
       - "traefik.enable=true"
       - "traefik.docker.network=traefik_default"
 
-      # Router
+      # Router — change example.com to your domain
       - "traefik.http.routers.claude.rule=Host(`claude.example.com`)"
       - "traefik.http.routers.claude.entrypoints=websecure"
       - "traefik.http.routers.claude.tls.certresolver=cloudflare"
@@ -49,11 +42,11 @@ services:
       - "traefik.http.services.claude.loadbalancer.server.port=2222"
 
       # Redirect / -> /ssh/host/claude-code
-      - "traefik.http.middlewares.claude-redirect.redirectregex.regex=^https://claude\\.example\\.com/?$"
+      - "traefik.http.middlewares.claude-redirect.redirectregex.regex=^https://claude\\.example\\.com/?$$"
       - "traefik.http.middlewares.claude-redirect.redirectregex.replacement=https://claude.example.com/ssh/host/claude-code"
       - "traefik.http.middlewares.claude-redirect.redirectregex.permanent=true"
 
-      # Chain middlewares: redirect first, then auth (same pattern you had)
+      # Chain middlewares: redirect first, then auth
       - "traefik.http.routers.claude.middlewares=claude-redirect,forwardauth@docker"
 
 networks:
