@@ -1,15 +1,6 @@
-# Version control
 .git
 .gitignore
-
-# Documentation
+.github
 *.md
-
-# Example files
 example/
-
-# Images
-*.jpg
-
-# Docker files
-compose.yml
+LICENSE

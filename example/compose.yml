@@ -1,13 +1,12 @@
-version: "3.8"
-
 services:
   claude-code:
     image: dgshue/claude-container:latest
     container_name: claude-code
+    restart: unless-stopped
     environment:
       CLAUDE_CONFIG_DIR: /claude
       SSH_USER: ${SSH_USER:-claude}
-      SSH_PASSWORD: ${SSH_PASSWORD:-changeme}
+      SSH_PASSWORD: ${SSH_PASSWORD:?Set SSH_PASSWORD in .env}
       BRAVE_API_KEY: ${BRAVE_API_KEY:-}
       PUID: ${PUID:-1000}
       PGID: ${PGID:-1000}
@@ -17,40 +16,16 @@ services:
       - ./data/home:/home/claude
       - /var/run/docker.sock:/var/run/docker.sock
     ports:
-      - "22222:22"
-    networks:
-      - traefik_default
-      - claude_webssh
+      - "2222:22"
 
-  webssh2:
-    image: billchurch/webssh2:latest
-    container_name: webssh2
-    restart: unless-stopped
-    networks:
-      - traefik_default
-      - claude_webssh
-    labels:
-      - "traefik.enable=true"
-      - "traefik.docker.network=traefik_default"
-
-      # Router — change example.com to your domain
-      - "traefik.http.routers.claude.rule=Host(`claude.example.com`)"
-      - "traefik.http.routers.claude.entrypoints=websecure"
-      - "traefik.http.routers.claude.tls.certresolver=cloudflare"
-
-      # WebSSH2 listens on 2222 in-container by default
-      - "traefik.http.services.claude.loadbalancer.server.port=2222"
-
-      # Redirect / -> /ssh/host/claude-code
-      - "traefik.http.middlewares.claude-redirect.redirectregex.regex=^https://claude\\.example\\.com/?$$"
-      - "traefik.http.middlewares.claude-redirect.redirectregex.replacement=https://claude.example.com/ssh/host/claude-code"
-      - "traefik.http.middlewares.claude-redirect.redirectregex.permanent=true"
-
-      # Chain middlewares: redirect first, then auth
-      - "traefik.http.routers.claude.middlewares=claude-redirect,forwardauth@docker"
-
-networks:
-  traefik_default:
-    external: true
-  claude_webssh:
-    driver: bridge
+  # Optional: browser-based SSH access via WebSSH2
+  # Uncomment the section below to enable web terminal access
+  #
+  # webssh2:
+  #   image: billchurch/webssh2:latest
+  #   container_name: webssh2
+  #   restart: unless-stopped
+  #   ports:
+  #     - "8080:2222"
+  #   # Connect to claude-code via the default Docker bridge network
+  #   # Open http://localhost:8080/ssh/host/claude-code in your browser
