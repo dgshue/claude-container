@@ -112,10 +112,10 @@ RUN npm install -g --force playwright \
   && npx playwright install --with-deps chromium
 
 # ── 10. Claude Code ──────────────────────────────────────────────────
-RUN npm install -g @anthropic-ai/claude-code@~2.1.100
+RUN npm install -g @anthropic-ai/claude-code@~2.1.101
 
 # ── 10b. GSD Pi (v2) — coding agent harness ─────────────────────────
-RUN npm install -g gsd-pi@~2.67.0
+RUN npm install -g gsd-pi@~2.70.1
 
 # ── 10c. mcporter — MCP server runtime/CLI for Pi ───────────────────
 RUN npm install -g mcporter
