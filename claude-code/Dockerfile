@@ -59,7 +59,7 @@ RUN curl -fsSL https://download.docker.com/linux/debian/gpg \
   && rm -rf /var/lib/apt/lists/*
 
 # ── 7. Infrastructure tools (Terraform, kubectl, Helm) ──────────────
-ARG TERRAFORM_VERSION=1.15.0
+ARG TERRAFORM_VERSION=1.15.1
 ARG KUBECTL_VERSION=1.36.0
 ARG HELM_VERSION=3.16.4
 
