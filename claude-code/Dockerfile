@@ -60,7 +60,7 @@ RUN curl -fsSL https://download.docker.com/linux/debian/gpg \
 
 # ── 7. Infrastructure tools (Terraform, kubectl, Helm) ──────────────
 ARG TERRAFORM_VERSION=1.15.2
-ARG KUBECTL_VERSION=1.36.0
+ARG KUBECTL_VERSION=1.36.1
 ARG HELM_VERSION=3.16.4
 
 RUN arch="$(dpkg --print-architecture)" \
@@ -112,7 +112,7 @@ RUN npm install -g --force playwright \
   && npx playwright install --with-deps chromium
 
 # ── 10. Claude Code ──────────────────────────────────────────────────
-RUN npm install -g @anthropic-ai/claude-code@~2.1.139
+RUN npm install -g @anthropic-ai/claude-code@~2.1.140
 
 # ── 10b. GSD Pi (v2) — coding agent harness ─────────────────────────
 RUN npm install -g gsd-pi@~2.82.0
