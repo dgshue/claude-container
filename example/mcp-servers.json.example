@@ -1,0 +1,17 @@
+{
+  "memory": {
+    "command": "npx",
+    "args": ["-y", "@anthropic-ai/claude-code-mcp-server-memory"]
+  },
+  "brave-search": {
+    "command": "npx",
+    "args": ["-y", "@anthropic-ai/claude-code-mcp-server-brave-search"],
+    "env": {
+      "BRAVE_API_KEY": "your-brave-api-key-here"
+    }
+  },
+  "filesystem": {
+    "command": "npx",
+    "args": ["-y", "@anthropic-ai/claude-code-mcp-server-filesystem", "--dir", "/workspace"]
+  }
+}

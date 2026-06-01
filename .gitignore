@@ -2,6 +2,7 @@ example/workspace/
 example/claude-config/
 example/proxy-data/
 proxy-data/
+local/
 .env*
 .claude/
 .bg-shell/

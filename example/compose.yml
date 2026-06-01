@@ -10,11 +10,30 @@ services:
       BRAVE_API_KEY: ${BRAVE_API_KEY:-}
       PUID: ${PUID:-1000}
       PGID: ${PGID:-1000}
+
+      # ── MCP Server Configuration ──────────────────────────────────
+      # Option 1: Mount a JSON file (see mcp-servers.json.example)
+      # MCP_SERVERS_FILE: /mcp/servers.json
+
+      # Option 2: Inline JSON (for simple setups)
+      # MCP_SERVERS: |
+      #   {
+      #     "memory": {
+      #       "command": "npx",
+      #       "args": ["-y", "@anthropic-ai/claude-code-mcp-server-memory"]
+      #     }
+      #   }
+
+      # Set to "true" to overwrite existing settings.json on restart
+      # MCP_FORCE_CONFIG: "false"
+
     volumes:
       - ./data/workspace:/workspace
       - ./data/claude-config:/claude
       - ./data/home:/home/claude
       - /var/run/docker.sock:/var/run/docker.sock
+      # Uncomment to mount MCP server config file
+      # - ./mcp-servers.json:/mcp/servers.json:ro
     ports:
       - "2222:22"
 

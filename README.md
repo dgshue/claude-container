@@ -76,9 +76,84 @@ Then open `http://localhost:8080/ssh/host/claude-code` in your browser.
 | `SSH_USER` | `claude` | SSH username |
 | `SSH_PASSWORD` | `claude` | SSH password (**change this**) |
 | `CLAUDE_CONFIG_DIR` | `/claude` | Claude Code config/credentials directory |
-| `BRAVE_API_KEY` | _(empty)_ | Brave Search API key for MCP server |
+| `BRAVE_API_KEY` | _(empty)_ | Brave Search API key (convenience shortcut) |
+| `MCP_SERVERS` | _(empty)_ | Inline JSON string with MCP server definitions |
+| `MCP_SERVERS_FILE` | _(empty)_ | Path to a mounted JSON file with MCP servers |
+| `MCP_FORCE_CONFIG` | `false` | Set to `true` to overwrite `settings.json` on restart |
 | `PUID` | `1000` | Container user UID |
 | `PGID` | `1000` | Container user GID |
+
+### MCP Server Configuration
+
+MCP servers are configured from three sources, merged in order (later sources win on name collisions):
+
+1. **`BRAVE_API_KEY`** — convenience shortcut that adds the `brave-search` server
+2. **`MCP_SERVERS_FILE`** — path to a mounted JSON file
+3. **`MCP_SERVERS`** — inline JSON string
+
+The entrypoint writes a merged `settings.json` to `CLAUDE_CONFIG_DIR`. If `settings.json` already exists, it is **not overwritten** unless `MCP_FORCE_CONFIG=true`.
+
+#### Option A: Mount a JSON file
+
+Create a `mcp-servers.json` file (see [`example/mcp-servers.json.example`](example/mcp-servers.json.example)):
+
+```json
+{
+  "memory": {
+    "command": "npx",
+    "args": ["-y", "@anthropic-ai/claude-code-mcp-server-memory"]
+  },
+  "brave-search": {
+    "command": "npx",
+    "args": ["-y", "@anthropic-ai/claude-code-mcp-server-brave-search"],
+    "env": { "BRAVE_API_KEY": "your-key" }
+  }
+}
+```
+
+Then in `compose.yml`:
+
+```yaml
+services:
+  claude-code:
+    environment:
+      MCP_SERVERS_FILE: /mcp/servers.json
+    volumes:
+      - ./mcp-servers.json:/mcp/servers.json:ro
+```
+
+#### Option B: Inline JSON
+
+For simple setups, pass the config directly:
+
+```yaml
+services:
+  claude-code:
+    environment:
+      MCP_SERVERS: |
+        {
+          "memory": {
+            "command": "npx",
+            "args": ["-y", "@anthropic-ai/claude-code-mcp-server-memory"]
+          }
+        }
+```
+
+#### Option C: Combine sources
+
+All three sources merge together. For example, use `BRAVE_API_KEY` for the search server and a file for everything else:
+
+```yaml
+services:
+  claude-code:
+    environment:
+      BRAVE_API_KEY: ${BRAVE_API_KEY}
+      MCP_SERVERS_FILE: /mcp/servers.json
+    volumes:
+      - ./mcp-servers.json:/mcp/servers.json:ro
+```
+
+Both JSON formats are accepted — a bare object `{...}` or wrapped as `{"mcpServers": {...}}`.
 
 ### Volumes
 
@@ -138,8 +213,9 @@ claude-container/
 │   ├── entrypoint.sh       # SSH + user setup + MCP config
 │   └── mcp-settings.json   # Brave Search MCP template
 ├── example/
-│   ├── compose.yml         # Ready-to-use Docker Compose
-│   └── .env.example        # Environment variable template
+│   ├── compose.yml              # Ready-to-use Docker Compose
+│   ├── .env.example             # Environment variable template
+│   └── mcp-servers.json.example # MCP server config template
 └── .github/
     ├── workflows/
     │   ├── build.yml       # Build on push to main

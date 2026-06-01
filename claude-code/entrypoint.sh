@@ -53,18 +53,79 @@ setup_docker_socket() {
 }
 
 # ── MCP config setup ─────────────────────────────────────────────────
+#
+# MCP servers can be configured from three sources (merged in order):
+#   1. BRAVE_API_KEY env var        → adds brave-search server (convenience shortcut)
+#   2. MCP_SERVERS_FILE env var     → path to a JSON file with mcpServers object
+#   3. MCP_SERVERS env var          → inline JSON string with mcpServers object
+#
+# Later sources override earlier ones when server names collide.
+# If settings.json already exists, MCP config is NOT overwritten unless
+# MCP_FORCE_CONFIG=true is set.
+#
 setup_mcp_config() {
     local config_dir="${CLAUDE_CONFIG_DIR:-/claude}"
     local settings_file="${config_dir}/settings.json"
-    local template="/opt/claude-mcp-template.json"
 
-    # Only create if BRAVE_API_KEY is set and settings.json doesn't already exist
-    if [ -n "${BRAVE_API_KEY:-}" ] && [ ! -f "$settings_file" ]; then
-        mkdir -p "$config_dir"
-        sed "s/__BRAVE_API_KEY__/${BRAVE_API_KEY}/g" "$template" > "$settings_file"
-        # Fix ownership for the running user
-        chown "$USER_UID:$USER_GID" "$settings_file" 2>/dev/null || true
+    # Check if any MCP configuration is provided
+    local has_config=false
+    [ -n "${BRAVE_API_KEY:-}" ] && has_config=true
+    [ -n "${MCP_SERVERS_FILE:-}" ] && has_config=true
+    [ -n "${MCP_SERVERS:-}" ] && has_config=true
+
+    if [ "$has_config" = false ]; then
+        return 0
     fi
+
+    # Skip if settings.json exists and force is not set
+    if [ -f "$settings_file" ] && [ "${MCP_FORCE_CONFIG:-false}" != "true" ]; then
+        return 0
+    fi
+
+    mkdir -p "$config_dir"
+
+    # Build the mcpServers object by merging sources with jq
+    local mcp_json='{}'
+
+    # Source 1: BRAVE_API_KEY convenience shortcut
+    if [ -n "${BRAVE_API_KEY:-}" ]; then
+        mcp_json=$(echo "$mcp_json" | jq --arg key "$BRAVE_API_KEY" \
+            '. + {"brave-search": {"command": "npx", "args": ["-y", "@anthropic-ai/claude-code-mcp-server-brave-search"], "env": {"BRAVE_API_KEY": $key}}}')
+    fi
+
+    # Source 2: MCP_SERVERS_FILE (mounted JSON file)
+    if [ -n "${MCP_SERVERS_FILE:-}" ] && [ -f "${MCP_SERVERS_FILE}" ]; then
+        local file_json
+        file_json=$(cat "$MCP_SERVERS_FILE")
+        # Accept either {"mcpServers": {...}} or bare {...} format
+        local file_servers
+        file_servers=$(echo "$file_json" | jq 'if has("mcpServers") then .mcpServers else . end' 2>/dev/null) || {
+            echo "[entrypoint] WARNING: Failed to parse MCP_SERVERS_FILE ($MCP_SERVERS_FILE), skipping" >&2
+            file_servers='{}'
+        }
+        mcp_json=$(echo "$mcp_json" "$file_servers" | jq -s '.[0] * .[1]')
+    fi
+
+    # Source 3: MCP_SERVERS inline JSON
+    if [ -n "${MCP_SERVERS:-}" ]; then
+        local inline_servers
+        # Accept either {"mcpServers": {...}} or bare {...} format
+        inline_servers=$(echo "$MCP_SERVERS" | jq 'if has("mcpServers") then .mcpServers else . end' 2>/dev/null) || {
+            echo "[entrypoint] WARNING: Failed to parse MCP_SERVERS env var, skipping" >&2
+            inline_servers='{}'
+        }
+        mcp_json=$(echo "$mcp_json" "$inline_servers" | jq -s '.[0] * .[1]')
+    fi
+
+    # Write settings.json with the merged MCP config
+    echo "$mcp_json" | jq '{mcpServers: .}' > "$settings_file"
+
+    # Fix ownership for the running user
+    chown "$USER_UID:$USER_GID" "$settings_file" 2>/dev/null || true
+
+    local server_count
+    server_count=$(echo "$mcp_json" | jq 'keys | length')
+    echo "[entrypoint] MCP config written to $settings_file ($server_count server(s))"
 }
 
 # ── Main ──────────────────────────────────────────────────────────────
